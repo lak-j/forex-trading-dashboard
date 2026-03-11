@@ -1,31 +1,446 @@
-.App {
-  text-align: center;
-}
+/* App styling for improved layout and polish */
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-.App-header {
-  background-color: #282c34;
+.app {
   min-height: 100vh;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  background: radial-gradient(circle at top, #2b6cb0 0%, #0b2c4e 55%, #050b17 100%);
+  color: #1f2937;
+}
+
+.app-header {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 20px 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-title h1 {
+  margin: 0;
+  font-size: 2.2rem;
+  letter-spacing: -0.02em;
+}
+
+.app-subtitle {
+  margin: 8px 0 0;
+  color: rgba(31, 41, 55, 0.8);
+  max-width: 360px;
+}
+
+.app-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.app-main {
+  max-width: 1100px;
+  margin: 0 auto 40px;
+  padding: 0 20px 40px;
+  display: grid;
+  grid-template-columns: 1.2fr 360px;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+}
+
+.tradingview-widget-container {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+  position: relative;
+}
+
+.app.dark .tradingview-widget-container {
+  background: rgba(15, 23, 42, 0.66);
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+.card-main {
+  min-width: 320px;
+}
+
+.card-aside {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  padding: 24px;
+}
+
+.tab-bar {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.tab {
+  flex: 1;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: rgba(31, 41, 55, 0.7);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.tab:hover {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.tab.active {
+  color: #1f2937;
+  background: rgba(255, 255, 255, 1);
+  box-shadow: inset 0 -2px 0 0 #2563eb;
+}
+
+.card-content {
+  padding: 24px;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.field {
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.field--full {
+  grid-column: 1 / -1;
+}
+
+.field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(31, 41, 55, 0.9);
+}
+
+.field input,
+.field select {
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  outline: none;
+  transition: border 150ms ease, box-shadow 150ms ease;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: rgba(37, 99, 235, 0.8);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.toggle {
+  display: flex;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.toggle-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 10px 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.toggle-btn.active {
+  background: #2563eb;
+  color: #fff;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 18px 0 12px;
+}
+
+.button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.08);
+  color: rgba(15, 23, 42, 0.9);
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: background 150ms ease, transform 100ms ease;
+}
+
+.button:hover {
+  background: rgba(15, 23, 42, 0.16);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.button-primary {
+  background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+  color: #fff;
+}
+
+.button-secondary {
+  background: rgba(15, 23, 42, 0.16);
+}
+
+.result-box {
+  margin-top: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 18px;
+}
+
+.result-header {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-.App-link {
-  color: #61dafb;
+.result-list p {
+  margin: 6px 0;
+  line-height: 1.5;
 }
 
-.heart {
-  color: #ff0000;
+.result-list p:first-child {
+  margin-top: 0;
 }
 
-.small {
-  font-size: 0.75rem;
+.hint {
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: rgba(31, 41, 55, 0.7);
+}
+
+.error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(220, 38, 38, 0.12);
+  color: rgba(220, 38, 38, 0.95);
+  margin-bottom: 12px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.history-item {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.history-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: rgba(31, 41, 55, 0.7);
+  margin-bottom: 8px;
+}
+
+.history-lines p {
+  margin: 4px 0;
+  line-height: 1.4;
+}
+
+.empty {
+  color: rgba(31, 41, 55, 0.65);
+}
+
+.tips {
+  padding-left: 18px;
+  margin: 0;
+  color: rgba(31, 41, 55, 0.8);
+}
+
+.tips li {
+  margin-bottom: 10px;
+  line-height: 1.45;
+}
+
+.footer-note {
+  margin-top: 16px;
+  font-size: 0.85rem;
+  color: rgba(31, 41, 55, 0.65);
+}
+
+.app-footer {
+  text-align: center;
+  padding: 16px 12px 30px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 960px) {
+  .app-main {
+    grid-template-columns: 1fr;
+  }
+
+  .card-aside {
+    position: relative;
+    top: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
+
+/* Dark theme overrides */
+.app.dark {
+  background: radial-gradient(circle at top, #0f172a 0%, #020617 55%, #000000 100%);
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.app.dark .app-title h1 {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.app.dark .app-subtitle {
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.app.dark .tab {
+  color: rgba(226, 232, 240, 0.8);
+}
+
+.app.dark .hint,
+.app.dark .footer-note,
+.app.dark .empty {
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.app.dark .card {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+.app.dark .tab-bar {
+  background: rgba(15, 23, 42, 0.75);
+  border-bottom-color: rgba(148, 163, 184, 0.25);
+}
+
+.app.dark .tab {
+  color: rgba(203, 213, 225, 0.75);
+}
+
+.app.dark .tab.active {
+  color: #fff;
+  background: rgba(37, 99, 235, 0.25);
+  box-shadow: inset 0 -2px 0 0 #60a5fa;
+}
+
+.app.dark .card-content {
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.app.dark .field label {
+  color: rgba(226, 232, 240, 0.8);
+}
+
+.app.dark .field input,
+.app.dark .field select {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.app.dark .field input:focus,
+.app.dark .field select:focus {
+  border-color: rgba(37, 99, 235, 0.9);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
+
+.app.dark .button {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.app.dark .button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.app.dark .button-primary {
+  background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+}
+
+.app.dark .button-secondary {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.app.dark .result-box {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+.app.dark .history-item {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(148, 163, 184, 0.12);
+}
+
+.app.dark .history-meta {
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.app.dark .history-lines p {
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.app.dark .footer-note,
+.app.dark .hint,
+.app.dark .empty {
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.app.dark .tips {
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.app.dark .tips li {
+  color: rgba(226, 232, 240, 0.82);
 }

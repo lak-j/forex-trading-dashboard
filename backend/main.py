@@ -168,3 +168,44 @@ def advice(trade: Trade):
         text = "Good Trade ✅"
 
     return {"advice": text}
+
+
+# -----------------------
+# Full trade summary
+# -----------------------
+@app.post("/summary")
+def summary(trade: Trade):
+    """Return a full set of calculated values so the UI can render a single summary."""
+
+    risk_amount = trade.capital * trade.risk_percent / 100
+    pip_value = 10 * trade.lot_size
+    profit_loss = trade.pips * pip_value
+
+    if trade.trade_type == "BUY":
+        stop_loss_price = trade.entry_price - trade.stop_loss_pips
+        take_profit_price = trade.entry_price + trade.pips
+    else:
+        stop_loss_price = trade.entry_price + trade.stop_loss_pips
+        take_profit_price = trade.entry_price - trade.pips
+
+    reward = profit_loss
+    ratio = reward / risk_amount if risk_amount else 0
+
+    lot = None
+    if trade.stop_loss_pips != 0:
+        lot = risk_amount / (trade.stop_loss_pips * 10)
+
+    leverage = 100
+    required_margin = (trade.lot_size * 100000) / leverage
+
+    return {
+        "risk_amount": round(risk_amount, 2),
+        "profit_loss": round(profit_loss, 2),
+        "stop_loss": round(stop_loss_price, 5),
+        "take_profit": round(take_profit_price, 5),
+        "risk_reward_ratio": round(ratio, 2),
+        "position_size": round(lot, 2) if lot is not None else None,
+        "pip_value": round(pip_value, 2),
+        "required_margin": round(required_margin, 2),
+        "advice": advice(trade)["advice"],
+    }
