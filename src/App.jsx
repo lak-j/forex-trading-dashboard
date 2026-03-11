@@ -1,137 +1,249 @@
+import TradingChart from "./TradingChart";
 import { useState } from "react";
 
-function App() {
+function App(){
 
-  const BACKEND_URL = "https://cuddly-space-succotash-69p4w9jj4rv35454-8000.app.github.dev";
+const API="https://cuddly-space-succotash-69p4w9jj4rv35454-8000.app.github.dev";
 
-  const [pair, setPair] = useState("EUR/USD");
-  const [capital, setCapital] = useState("");
-  const [risk, setRisk] = useState("");
-  const [lotSize, setLotSize] = useState("");
-  const [pips, setPips] = useState("");
-  const [entryPrice, setEntryPrice] = useState("");
-  const [stopLossPips, setStopLossPips] = useState("");
-  const [tradeType, setTradeType] = useState("");
-  const [result, setResult] = useState("");
+const [pair,setPair]=useState("EUR/USD");
+const [capital,setCapital]=useState("");
+const [risk,setRisk]=useState("");
+const [lot,setLot]=useState("");
+const [pips,setPips]=useState("");
+const [entry,setEntry]=useState("");
+const [stop,setStop]=useState("");
+const [type,setType]=useState("BUY");
+const [result,setResult]=useState("No calculation yet");
+const [history,setHistory]=useState([]);
 
-  const sendRequest = async (endpoint) => {
+const body=()=>({
+pair,
+capital:Number(capital),
+risk_percent:Number(risk),
+lot_size:Number(lot),
+pips:Number(pips),
+entry_price:Number(entry),
+stop_loss_pips:Number(stop),
+trade_type:type
+});
 
-    const body = {
-      pair,
-      capital: Number(capital),
-      risk: Number(risk),
-      lot_size: Number(lotSize),
-      pips: Number(pips),
-      entry_price: Number(entryPrice),
-      stop_loss_pips: Number(stopLossPips),
-      trade_type: tradeType
-    };
+const callAPI=async(endpoint)=>{
 
-    try {
+try{
 
-      const res = await fetch(`${BACKEND_URL}/${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(body)
-      });
+const res=await fetch(`${API}/${endpoint}`,{
+method:"POST",
+headers:{ "Content-Type":"application/json"},
+body:JSON.stringify(body())
+});
 
-      const data = await res.json();
+const data=await res.json();
 
-      if (endpoint === "calculate-risk") {
-        setResult("Risk Amount: $" + data.risk_amount);
-      }
+let text="";
 
-      if (endpoint === "estimate-trade") {
-        setResult(`Profit/Loss: $${data.profit_loss}`);
-      }
+if(endpoint==="risk"){
+text=`Risk Amount: $${data.risk_amount}`;
+}
 
-      if (endpoint === "calculate-stop-loss") {
-        setResult("Stop Loss Price: " + data.stop_loss_price);
-      }
+if(endpoint==="profit"){
+text=`Estimated Profit/Loss: $${data.profit_loss}`;
+}
 
-    } catch (err) {
-      setResult("Backend connection failed");
-      console.log(err);
-    }
-  };
+if(endpoint==="stoploss"){
+text=`Stop Loss Price: ${data.stop_loss}`;
+}
 
-  return (
-    <div style={{padding:"40px",fontFamily:"Arial"}}>
+if(endpoint==="takeprofit"){
+text=`Take Profit Price: ${data.take_profit}`;
+}
 
-      <h1>Forex Trading Calculator</h1>
+if(endpoint==="riskreward"){
+text=`Risk: $${data.risk} | Reward: $${data.reward} | Ratio: ${data.ratio}`;
+}
 
-      <br/>
+if(endpoint==="positionsize"){
+text=`Recommended Lot Size: ${data.lot_size}`;
+}
 
-      <select value={pair} onChange={(e)=>setPair(e.target.value)}>
-        <option>EUR/USD</option>
-        <option>GBP/USD</option>
-        <option>USD/JPY</option>
-        <option>XAU/USD</option>
-      </select>
+if(endpoint==="pipvalue"){
+text=`Pip Value: $${data.pip_value} per pip`;
+}
 
-      <br/><br/>
+if(endpoint==="margin"){
+text=`Required Margin: $${data.required_margin}`;
+}
 
-      <input placeholder="Capital" type="number"
-      value={capital}
-      onChange={(e)=>setCapital(e.target.value)}/>
+if(endpoint==="advice"){
+text=`Trade Advice: ${data.advice}`;
+}
 
-      <br/><br/>
+setResult(text);
 
-      <input placeholder="Risk %" type="number"
-      value={risk}
-      onChange={(e)=>setRisk(e.target.value)}/>
+setHistory([...history,{
+pair,
+type,
+result:text
+}]);
 
-      <br/><br/>
+}catch{
+setResult("❌ Backend connection failed");
+}
 
-      <input placeholder="Lot Size" type="number"
-      value={lotSize}
-      onChange={(e)=>setLotSize(e.target.value)}/>
+};
 
-      <br/><br/>
+const inputStyle={
+padding:"10px",
+marginTop:"5px",
+width:"100%",
+borderRadius:"6px",
+border:"1px solid #ccc"
+};
 
-      <input placeholder="Pips" type="number"
-      value={pips}
-      onChange={(e)=>setPips(e.target.value)}/>
+const buttonStyle={
+padding:"10px",
+margin:"5px",
+border:"none",
+borderRadius:"6px",
+cursor:"pointer",
+color:"white"
+};
 
-      <br/><br/>
+return(
 
-      <input placeholder="Entry Price" type="number"
-      value={entryPrice}
-      onChange={(e)=>setEntryPrice(e.target.value)}/>
+<div style={{
+background:"#eef2f7",
+minHeight:"100vh",
+display:"flex",
+justifyContent:"center",
+alignItems:"center",
+fontFamily:"Arial"
+}}>
 
-      <br/><br/>
+<div style={{
+background:"white",
+padding:"30px",
+width:"420px",
+borderRadius:"10px",
+boxShadow:"0 0 20px rgba(0,0,0,0.1)"
+}}>
 
-      <input placeholder="Stop Loss Pips" type="number"
-      value={stopLossPips}
-      onChange={(e)=>setStopLossPips(e.target.value)}/>
+<h2 style={{textAlign:"center"}}>Forex Trading For Beginners</h2>
 
-      <br/><br/>
+<label>Currency Pair</label>
+<select value={pair} onChange={e=>setPair(e.target.value)} style={inputStyle}>
+<option>EUR/USD</option>
+<option>GBP/USD</option>
+<option>USD/JPY</option>
+<option>XAU/USD</option>
+</select>
 
-      <button onClick={()=>setTradeType("BUY")}>BUY</button>
-      <button onClick={()=>setTradeType("SELL")}>SELL</button>
+<br/><br/>
 
-      <p>Trade: {tradeType}</p>
+<label>Account Balance ($)</label>
+<input style={inputStyle} value={capital} onChange={e=>setCapital(e.target.value)}/>
 
-      <br/>
+<br/><br/>
 
-      <button onClick={()=>sendRequest("calculate-risk")}>Calculate Risk</button>
+<label>Risk %</label>
+<input style={inputStyle} value={risk} onChange={e=>setRisk(e.target.value)}/>
 
-      <button onClick={()=>sendRequest("estimate-trade")}>
-        Estimate Profit
-      </button>
+<br/><br/>
 
-      <button onClick={()=>sendRequest("calculate-stop-loss")}>
-        Stop Loss
-      </button>
+<label>Lot Size</label>
+<input style={inputStyle} value={lot} onChange={e=>setLot(e.target.value)}/>
 
-      <br/><br/>
+<br/><br/>
 
-      <h2>{result}</h2>
+<label>Target Pips</label>
+<input style={inputStyle} value={pips} onChange={e=>setPips(e.target.value)}/>
 
-    </div>
-  );
+<br/><br/>
+
+<label>Entry Price</label>
+<input style={inputStyle} value={entry} onChange={e=>setEntry(e.target.value)}/>
+
+<br/><br/>
+
+<label>Stop Loss (Pips)</label>
+<input style={inputStyle} value={stop} onChange={e=>setStop(e.target.value)}/>
+
+<br/><br/>
+
+<h4>Select Trade Type</h4>
+
+<div style={{display:"flex",justifyContent:"space-between"}}>
+
+<button
+onClick={()=>setType("BUY")}
+style={{
+...buttonStyle,
+background:type==="BUY"?"green":"gray"
+}}
+>
+BUY
+</button>
+
+<button
+onClick={()=>setType("SELL")}
+style={{
+...buttonStyle,
+background:type==="SELL"?"red":"gray"
+}}
+>
+SELL
+</button>
+
+</div>
+
+<p><b>Selected:</b> {type}</p>
+
+<hr/>
+
+<h4>Calculations</h4>
+
+<button style={{...buttonStyle,background:"#007bff"}} onClick={()=>callAPI("risk")}>Risk</button>
+<button style={{...buttonStyle,background:"#28a745"}} onClick={()=>callAPI("profit")}>Profit</button>
+<button style={{...buttonStyle,background:"#dc3545"}} onClick={()=>callAPI("stoploss")}>Stop Loss</button>
+<button style={{...buttonStyle,background:"#17a2b8"}} onClick={()=>callAPI("takeprofit")}>Take Profit</button>
+
+<button style={{...buttonStyle,background:"#6f42c1"}} onClick={()=>callAPI("riskreward")}>Risk Reward</button>
+<button style={{...buttonStyle,background:"#ff9800"}} onClick={()=>callAPI("positionsize")}>Position Size</button>
+<button style={{...buttonStyle,background:"#009688"}} onClick={()=>callAPI("pipvalue")}>Pip Value</button>
+<button style={{...buttonStyle,background:"#795548"}} onClick={()=>callAPI("margin")}>Margin</button>
+<button style={{...buttonStyle,background:"#333"}} onClick={()=>callAPI("advice")}>Advice</button>
+
+<hr/>
+
+<div style={{
+background:"#f4f6f9",
+padding:"15px",
+borderRadius:"6px"
+}}>
+<h3>Result</h3>
+<p>{result}</p>
+</div>
+
+<hr/>
+
+<h3>Trade History</h3>
+
+<ul>
+
+{history.map((h,i)=>(
+<li key={i}>
+{h.pair} {h.type} → {h.result}
+</li>
+))}
+
+</ul>
+
+</div>
+
+</div>
+
+);
+
+
 }
 
 export default App;
