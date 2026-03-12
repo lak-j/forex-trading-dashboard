@@ -1,7 +1,7 @@
 import TradingChart from "./TradingChart";
 import logo from "./logo.svg";
 import "./App.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_API = "https://cuddly-space-succotash-69p4w9jj4rv35454-8000.app.github.dev";
 
@@ -30,6 +30,83 @@ const formatDecimal = (value, digits = 5) => {
   return Number(value).toFixed(digits);
 };
 
+function ProfitChart({ history }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    const width = canvas.clientWidth;
+    const height = 220;
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.height = `${height}px`;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const points = history
+      .filter((item) => typeof item.profitLoss === "number")
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      .map((item) => item.profitLoss);
+
+    if (points.length === 0) {
+      ctx.fillStyle = "rgba(31, 41, 55, 0.75)";
+      ctx.font = "14px system-ui";
+      ctx.fillText("No profit history yet.", 14, 40);
+      return;
+    }
+
+    const cumulative = [];
+    let sum = 0;
+    points.forEach((p) => {
+      sum += p;
+      cumulative.push(sum);
+    });
+
+    const min = Math.min(...cumulative, 0);
+    const max = Math.max(...cumulative, 0);
+    const range = max - min || 1;
+
+    // grid
+    ctx.strokeStyle = "rgba(31, 41, 55, 0.12)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(0, (height / 4) * i);
+      ctx.lineTo(width, (height / 4) * i);
+      ctx.stroke();
+    }
+
+    // line
+    ctx.strokeStyle = "rgba(59, 130, 246, 1)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    cumulative.forEach((value, index) => {
+      const x = (index / (cumulative.length - 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // axis labels
+    ctx.fillStyle = "rgba(31, 41, 55, 0.75)";
+    ctx.font = "12px system-ui";
+    ctx.fillText(`Start: ${formatCurrency(cumulative[0])}`, 12, height - 12);
+    ctx.fillText(`End: ${formatCurrency(cumulative[cumulative.length - 1])}`, width - 120, height - 12);
+  }, [history]);
+
+  return (
+    <div className="profit-chart">
+      <canvas ref={canvasRef} style={{ width: "100%" }} />
+    </div>
+  );
+}
+
 function App() {
   const [apiUrl] = useState(DEFAULT_API);
   const [pair, setPair] = useState("EUR/USD");
@@ -48,6 +125,7 @@ function App() {
   const [autoCalculate, setAutoCalculate] = useState(false);
   const [chartInterval, setChartInterval] = useState("15");
   const [chartTheme, setChartTheme] = useState("light");
+  const [analytics, setAnalytics] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -88,11 +166,32 @@ function App() {
     [pair, capital, risk, lot, pips, entry, stop, type, leverage]
   );
 
+  const computeAnalytics = (historyItems) => {
+    const profits = historyItems
+      .filter((item) => typeof item.profitLoss === "number")
+      .map((item) => item.profitLoss);
+
+    const totalProfit = profits.reduce((sum, value) => sum + value, 0);
+    const wins = profits.filter((p) => p > 0).length;
+    const losses = profits.filter((p) => p < 0).length;
+    const avg = profits.length ? totalProfit / profits.length : 0;
+
+    return {
+      totalProfit,
+      trades: profits.length,
+      wins,
+      losses,
+      avg,
+    };
+  };
+
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem("fx-trade-history");
       if (stored) {
-        setHistory(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        setHistory(parsed);
+        setAnalytics(computeAnalytics(parsed));
       }
 
       const storedSettings = window.localStorage.getItem("fx-trade-settings");
@@ -105,7 +204,7 @@ function App() {
         if (parsed.pips) setPips(parsed.pips);
         if (parsed.entry) setEntry(parsed.entry);
         if (parsed.stop) setStop(parsed.stop);
-          if (parsed.type) setType(parsed.type);
+        if (parsed.type) setType(parsed.type);
         if (parsed.leverage) setLeverage(parsed.leverage);
         if (parsed.theme) setTheme(parsed.theme);
         if (parsed.highContrast) setHighContrast(parsed.highContrast);
@@ -164,7 +263,7 @@ function App() {
     chartTheme,
   ]);
 
-  const addHistoryEntry = (action, dataLines) => {
+  const addHistoryEntry = (action, dataLines, meta = {}) => {
     const entry = {
       id: Date.now(),
       createdAt: new Date().toISOString(),
@@ -173,8 +272,32 @@ function App() {
       type,
       leverage,
       lines: dataLines,
+      ...meta,
     };
-    setHistory((prev) => [entry, ...prev].slice(0, 20));
+
+    setHistory((prev) => {
+      const next = [entry, ...prev].slice(0, 20);
+
+      // Update analytics cache
+      const profitRecords = next
+        .filter((item) => typeof item.profitLoss === "number")
+        .map((item) => item.profitLoss);
+
+      const totalProfit = profitRecords.reduce((sum, v) => sum + v, 0);
+      const wins = profitRecords.filter((v) => v > 0).length;
+      const losses = profitRecords.filter((v) => v < 0).length;
+      const avg = profitRecords.length ? totalProfit / profitRecords.length : 0;
+
+      setAnalytics({
+        totalProfit,
+        trades: profitRecords.length,
+        wins,
+        losses,
+        avg,
+      });
+
+      return next;
+    });
   };
 
   const handleFetch = async (endpoint, label, options = {}) => {
@@ -193,6 +316,8 @@ function App() {
       const data = await res.json();
 
       const lines = [];
+
+      let historyMeta = {};
 
       switch (endpoint) {
         case "risk":
@@ -250,6 +375,11 @@ function App() {
             }
             lines.push(`Margin Needed: ${formatCurrency(data.required_margin)} (x${data.leverage})`);
             lines.push(`Advice: ${data.advice}`);
+
+            historyMeta = {
+              profitLoss: data.profit_loss,
+              riskAmount: data.risk_amount,
+            };
           }
           break;
         default:
@@ -257,7 +387,7 @@ function App() {
       }
 
       setResultLines(lines);
-      addHistoryEntry(label, lines);
+      addHistoryEntry(label, lines, historyMeta);
       setActiveTab("calculator");
     } catch (err) {
       setError("Unable to connect to the backend.");
@@ -292,7 +422,10 @@ function App() {
     setError("");
   };
 
-  const clearHistory = () => setHistory([]);
+  const clearHistory = () => {
+    setHistory([]);
+    setAnalytics(null);
+  };
 
   const isValidNumber = (value, allowZero = false) => {
     const num = Number(value);
@@ -391,6 +524,13 @@ function App() {
               onClick={() => setActiveTab("history")}
             >
               History
+            </button>
+            <button
+              className={`tab ${activeTab === "analytics" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveTab("analytics")}
+            >
+              Analytics
             </button>
           </div>
 
@@ -769,6 +909,47 @@ function App() {
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+          )}
+
+          {activeTab === "analytics" && (
+            <div className="card-content">
+              <h3>Profit analytics</h3>
+
+              {!analytics || analytics.trades === 0 ? (
+                <p className="empty">No trade profits saved yet — calculate a summary to start tracking.</p>
+              ) : (
+                <div className="profit-analytics">
+                  <div className="stat-row">
+                    <div className="stat-card">
+                      <div className="stat-title">Total P/L</div>
+                      <div className="stat-value">{formatCurrency(analytics.totalProfit)}</div>
+                      <div className="stat-sub">Across {analytics.trades} trades</div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-title">Average P/L</div>
+                      <div className="stat-value">{formatCurrency(analytics.avg)}</div>
+                      <div className="stat-sub">Per trade</div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-title">Win rate</div>
+                      <div className="stat-value">
+                        {analytics.trades > 0
+                          ? `${Math.round((analytics.wins / analytics.trades) * 100)}%`
+                          : "—"}
+                      </div>
+                      <div className="stat-sub">Wins / total</div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-title">Loss count</div>
+                      <div className="stat-value">{analytics.losses}</div>
+                      <div className="stat-sub">Trades below breakeven</div>
+                    </div>
+                  </div>
+
+                  <ProfitChart history={history} />
+                </div>
               )}
             </div>
           )}

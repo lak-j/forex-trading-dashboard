@@ -271,6 +271,57 @@
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.14);
 }
 
+.profit-analytics {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.profit-analytics .stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.profit-analytics .stat-card {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.profit-analytics .stat-title {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: rgba(31, 41, 55, 0.8);
+  margin-bottom: 6px;
+}
+
+.profit-analytics .stat-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+  color: rgba(15, 23, 42, 0.95);
+}
+
+.profit-analytics .stat-sub {
+  font-size: 0.83rem;
+  color: rgba(31, 41, 55, 0.65);
+}
+
+.profit-chart {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.profit-chart canvas {
+  width: 100%;
+  display: block;
+}
+
 .stat-title {
   font-weight: 700;
   font-size: 0.85rem;
