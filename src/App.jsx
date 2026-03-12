@@ -133,6 +133,7 @@ function App() {
 
   const [resultLines, setResultLines] = useState(["No calculation yet."]);
   const [summaryData, setSummaryData] = useState(null);
+  const [signalData, setSignalData] = useState(null);
   const [history, setHistory] = useState([]);
 
   const [touched, setTouched] = useState({
@@ -358,12 +359,36 @@ function App() {
         case "advice":
           lines.push(`Trade Advice: ${data.advice}`);
           break;
+        case "signal":
+          setSignalData(data);
+          lines.push(`Signal: ${data.signal}`);
+          if (data.confidence != null) {
+            lines.push(`Confidence: ${data.confidence}%`);
+          }
+          if (data.trend) {
+            lines.push(`Trend: ${data.trend}`);
+          }
+          if (data.momentum) {
+            lines.push(`Momentum: ${data.momentum}`);
+          }
+          if (data.open_sessions) {
+            lines.push(`Open sessions: ${data.open_sessions.join(", ") || "None"}`);
+          }
+          if (data.notes) {
+            lines.push(`Notes: ${data.notes}`);
+          }
+          if (data.model) {
+            lines.push(`Model: ${data.model}`);
+          }
+          break;
         case "summary":
           if (data.error) {
             lines.push(`Error: ${data.error}`);
             setSummaryData(null);
+            setSignalData(null);
           } else {
             setSummaryData(data);
+            setSignalData(data.signal ?? null);
             lines.push(`Risk Amount: ${formatCurrency(data.risk_amount)}`);
             lines.push(`Estimated Profit/Loss: ${formatCurrency(data.profit_loss)}`);
             lines.push(`Stop Loss Price: ${formatDecimal(data.stop_loss)}`);
@@ -376,6 +401,12 @@ function App() {
             }
             lines.push(`Margin Needed: ${formatCurrency(data.required_margin)} (x${data.leverage})`);
             lines.push(`Advice: ${data.advice}`);
+            if (data.signal) {
+              lines.push(`Signal: ${data.signal}`);
+              if (data.signal?.confidence != null) {
+                lines.push(`Signal confidence: ${data.signal.confidence}%`);
+              }
+            }
 
             historyMeta = {
               profitLoss: data.profit_loss,
@@ -394,6 +425,7 @@ function App() {
       setError("Unable to connect to the backend.");
       setResultLines(["❌ Backend connection failed"]);
       setSummaryData(null);
+      setSignalData(null);
     } finally {
       setLoading(false);
     }
@@ -411,6 +443,7 @@ function App() {
     setHighContrast(false);
     setResultLines(["No calculation yet."]);
     setSummaryData(null);
+    setSignalData(null);
     setTouched({
       capital: false,
       risk: false,
@@ -554,6 +587,13 @@ function App() {
               History
             </button>
             <button
+              className={`tab ${activeTab === "signals" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveTab("signals")}
+            >
+              Signals
+            </button>
+            <button
               className={`tab ${activeTab === "analytics" ? "active" : ""}`}
               type="button"
               onClick={() => setActiveTab("analytics")}
@@ -593,6 +633,7 @@ function App() {
                     onChange={(e) => {
                       setCapital(e.target.value);
                       setSummaryData(null);
+                      setSignalData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, capital: true }))}
                     className={
@@ -613,6 +654,7 @@ function App() {
                     onChange={(e) => {
                       setRisk(e.target.value);
                       setSummaryData(null);
+                      setSignalData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, risk: true }))}
                     className={
@@ -633,6 +675,7 @@ function App() {
                     onChange={(e) => {
                       setLot(e.target.value);
                       setSummaryData(null);
+                      setSignalData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, lot: true }))}
                     className={touched.lot && !isValidNumber(lot) ? "invalid" : ""}
@@ -651,6 +694,7 @@ function App() {
                     onChange={(e) => {
                       setLeverage(e.target.value);
                       setSummaryData(null);
+                      setSignalData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, leverage: true }))}
                     className={
@@ -676,6 +720,7 @@ function App() {
                     onChange={(e) => {
                       setPips(e.target.value);
                       setSummaryData(null);
+                      setSignalData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, pips: true }))}
                     className={
@@ -696,6 +741,7 @@ function App() {
                     onChange={(e) => {
                       setEntry(e.target.value);
                       setSummaryData(null);
+                      setSignalData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, entry: true }))}
                     className={
@@ -716,6 +762,7 @@ function App() {
                     onChange={(e) => {
                       setStop(e.target.value);
                       setSummaryData(null);
+                      setSignalData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, stop: true }))}
                     className={
@@ -793,6 +840,13 @@ function App() {
                 >
                   Advice
                 </button>
+                <button
+                  className="button"
+                  onClick={() => handleFetch("signal", "Signal")}
+                  disabled={!canCalculate || loading}
+                >
+                  Signal
+                </button>
               </div>
 
               {summaryData && (
@@ -834,6 +888,18 @@ function App() {
                     <div className="stat-value">x{leverage}</div>
                     <div className="stat-sub">used for margin</div>
                   </div>
+
+                  {summaryData.signal && (
+                    <div className="stat-card">
+                      <div className="stat-title">AI Signal</div>
+                      <div className="stat-value">{summaryData.signal.signal}</div>
+                      {summaryData.signal.confidence != null ? (
+                        <div className="stat-sub">
+                          {summaryData.signal.confidence}% confidence
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -937,6 +1003,62 @@ function App() {
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+          )}
+
+          {activeTab === "signals" && (
+            <div className="card-content">
+              <h3>Signal dashboard</h3>
+
+              {!signalData ? (
+                <p className="empty">
+                  No signal generated yet — click the Signal button in Calculator.
+                </p>
+              ) : (
+                <div className="profit-analytics">
+                  <div className="stat-row">
+                    <div className="stat-card">
+                      <div className="stat-title">Signal</div>
+                      <div className="stat-value">{signalData.signal}</div>
+                      <div className="stat-sub">
+                        {signalData.notes ?? ""}
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-title">Confidence</div>
+                      <div className="stat-value">{signalData.confidence ?? "—"}%</div>
+                      <div className="stat-sub">Model: {signalData.model}</div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-title">Trend</div>
+                      <div className="stat-value">{signalData.trend ?? "—"}</div>
+                      <div className="stat-sub">Basic direction estimate</div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-title">Momentum</div>
+                      <div className="stat-value">{signalData.momentum ?? "—"}</div>
+                      <div className="stat-sub">Action pace</div>
+                    </div>
+                  </div>
+
+                  {signalData.sessions ? (
+                    <div className="session-grid" style={{ marginTop: "18px" }}>
+                      {signalData.sessions.map((s) => (
+                        <div
+                          key={s.name}
+                          className={`session-card ${s.open ? "open" : ""}`}
+                        >
+                          <div className="session-name">{s.name}</div>
+                          <div className="session-meta">{s.label}</div>
+                          <div className="session-status">
+                            {s.open ? "Open now" : "Closed"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               )}
             </div>
           )}

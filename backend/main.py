@@ -71,6 +71,29 @@ def _fetch_live_rate(base: str, quote: str):
     }
 
 
+def _market_sessions():
+    """Return the major forex session windows and whether they are currently open (UTC)."""
+    now = datetime.utcnow()
+    hour = now.hour
+
+    sessions = [
+        {"name": "Sydney", "start": 22, "end": 7, "label": "22:00–07:00 UTC"},
+        {"name": "Tokyo", "start": 0, "end": 9, "label": "00:00–09:00 UTC"},
+        {"name": "London", "start": 7, "end": 16, "label": "07:00–16:00 UTC"},
+        {"name": "New York", "start": 12, "end": 21, "label": "12:00–21:00 UTC"},
+    ]
+
+    def is_open(h, start, end):
+        if start < end:
+            return start <= h < end
+        return h >= start or h < end
+
+    for s in sessions:
+        s["open"] = is_open(hour, s["start"], s["end"])
+
+    return sessions
+
+
 @app.get("/quote")
 def quote(pair: str = Query(..., description="Currency pair in the format BASE/QUOTE")):
     """Return a live quote for the requested forex pair."""
@@ -225,18 +248,26 @@ def risk_per_pip(trade: Trade):
 
 
 # -----------------------
+# Helpers
+# -----------------------
+
+def _compute_risk_reward(trade: Trade):
+    risk_amount = trade.capital * trade.risk_percent / 100
+    reward = trade.pips * trade.lot_size * 10
+    ratio = reward / risk_amount if risk_amount else 0
+    return risk_amount, reward, ratio
+
+
+# -----------------------
 # Trade Advice
 # -----------------------
 @app.post("/advice")
 def advice(trade: Trade):
 
-    risk = trade.capital * trade.risk_percent / 100
-    reward = trade.pips * trade.lot_size * 10
+    risk_amount, reward, rr = _compute_risk_reward(trade)
 
-    if risk == 0:
-        return {"advice":"Invalid trade"}
-
-    rr = reward / risk
+    if risk_amount == 0:
+        return {"advice": "Invalid trade"}
 
     if rr < 1.5:
         text = "Bad Trade ❌"
@@ -248,9 +279,72 @@ def advice(trade: Trade):
     return {"advice": text}
 
 
+def ai_signal(trade: Trade):
+    """Generate a simple rule-based 'AI' signal for the trade."""
+
+    risk_amount, reward, rr = _compute_risk_reward(trade)
+    sessions = _market_sessions()
+    open_sessions = [s["name"] for s in sessions if s["open"]]
+
+    if risk_amount == 0 or trade.pips == 0:
+        return {
+            "signal": "No signal",
+            "confidence": 0,
+            "notes": "Check your risk and pip values.",
+            "model": "MockAI v1",
+            "trend": "Neutral",
+            "momentum": "N/A",
+            "sessions": sessions,
+            "open_sessions": open_sessions,
+        }
+
+    base_seed = hash(trade.pair + trade.trade_type)
+    confidence = min(100, max(30, int(rr * 20)))
+
+    # A basic “signal” based on risk-reward and trade direction
+    if rr >= 2:
+        signal = "Strong " + trade.trade_type
+        notes = "The risk/reward profile is favorable."
+    elif rr >= 1.25:
+        signal = "Hold / Watch"
+        notes = "The trade is borderline; consider the wider market context."
+    else:
+        signal = "Avoid"
+        notes = "The risk/reward is weak; consider adjusting your stop or target."
+
+    # Small random variation in confidence to feel “AI-like”
+    noise = (base_seed % 11) - 5
+    confidence = max(20, min(98, confidence + noise))
+
+    # Simple trend / momentum estimation (pseudo-random but stable per pair/type)
+    trend_seed = (base_seed % 3)
+    trend = ["Bullish", "Neutral", "Bearish"][trend_seed]
+
+    momentum_seed = (base_seed % 4)
+    momentum = ["Strong", "Moderate", "Weak", "Volatile"][momentum_seed]
+
+    return {
+        "signal": signal,
+        "confidence": confidence,
+        "notes": notes,
+        "model": "MockAI v1",
+        "trend": trend,
+        "momentum": momentum,
+        "sessions": sessions,
+        "open_sessions": open_sessions,
+    }
+
+
 # -----------------------
 # Full trade summary
 # -----------------------
+@app.post("/signal")
+def signal(trade: Trade):
+    """Return a lightweight signal based on the current trade inputs."""
+
+    return ai_signal(trade)
+
+
 @app.post("/summary")
 def summary(trade: Trade):
     """Return a full set of calculated values so the UI can render a single summary."""
@@ -292,4 +386,5 @@ def summary(trade: Trade):
         "required_margin": round(required_margin, 2),
         "leverage": leverage,
         "advice": advice(trade)["advice"],
+        "signal": ai_signal(trade),
     }
