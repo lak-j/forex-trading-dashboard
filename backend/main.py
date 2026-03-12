@@ -1,6 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+import urllib.request
+import urllib.parse
+import json
+from datetime import datetime
 
 app = FastAPI()
 
@@ -27,11 +31,64 @@ class Trade(BaseModel):
     entry_price: float
     stop_loss_pips: float
     trade_type: str
+    leverage: int = 100
 
 
 @app.get("/")
 def home():
     return {"message": "Forex Trading API Running 🚀"}
+
+
+def _fetch_live_rate(base: str, quote: str):
+    """Fetches a live forex rate using a free public API (exchangerate.host)."""
+    base = base.upper()
+    quote = quote.upper()
+
+    if base == quote:
+        return {"rate": 1.0, "source": "self"}
+
+    url = (
+        "https://api.exchangerate.host/convert?"
+        + urllib.parse.urlencode({"from": base, "to": quote, "places": 6})
+    )
+
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            raw = resp.read().decode("utf-8")
+            data = json.loads(raw)
+    except Exception as e:
+        return {"error": f"Failed to fetch rate: {e}"}
+
+    if not data.get("success"):
+        return {"error": data.get("error", "Unknown API error")}
+
+    rate = data.get("result")
+    timestamp = data.get("timestamp")
+    return {
+        "rate": round(rate, 6) if isinstance(rate, (int, float)) else None,
+        "timestamp": datetime.utcfromtimestamp(timestamp).isoformat() + "Z" if timestamp else None,
+        "source": "exchangerate.host",
+    }
+
+
+@app.get("/quote")
+def quote(pair: str = Query(..., description="Currency pair in the format BASE/QUOTE")):
+    """Return a live quote for the requested forex pair."""
+
+    if "/" not in pair:
+        return {"error": "Pair must be in BASE/QUOTE format"}
+
+    base, quote_symbol = pair.strip().upper().split("/", 1)
+    result = _fetch_live_rate(base, quote_symbol)
+    if "error" in result:
+        return {"error": result["error"]}
+
+    return {
+        "pair": f"{base}/{quote_symbol}",
+        "rate": result["rate"],
+        "timestamp": result.get("timestamp"),
+        "source": result.get("source"),
+    }
 
 
 # -----------------------
@@ -140,10 +197,31 @@ def pipvalue(trade: Trade):
 @app.post("/margin")
 def margin(trade: Trade):
 
-    leverage = 100
+    leverage = trade.leverage or 100
     margin = (trade.lot_size * 100000) / leverage
 
-    return {"required_margin": round(margin,2)}
+    return {"required_margin": round(margin,2), "leverage": leverage}
+
+
+# -----------------------
+# Risk per pip
+# -----------------------
+@app.post("/riskperpip")
+def risk_per_pip(trade: Trade):
+    """Return how much $ risk each pip represents for the current stop-loss."""
+
+    risk_amount = trade.capital * trade.risk_percent / 100
+
+    if trade.stop_loss_pips == 0:
+        return {"error": "Stop loss cannot be zero"}
+
+    risk_per_pip = risk_amount / trade.stop_loss_pips
+    pip_value = 10 * trade.lot_size
+
+    return {
+        "risk_per_pip": round(risk_per_pip, 2),
+        "pip_value": round(pip_value, 2),
+    }
 
 
 # -----------------------
@@ -195,8 +273,12 @@ def summary(trade: Trade):
     if trade.stop_loss_pips != 0:
         lot = risk_amount / (trade.stop_loss_pips * 10)
 
-    leverage = 100
+    leverage = trade.leverage or 100
     required_margin = (trade.lot_size * 100000) / leverage
+
+    risk_per_pip = 0
+    if trade.stop_loss_pips != 0:
+        risk_per_pip = risk_amount / trade.stop_loss_pips
 
     return {
         "risk_amount": round(risk_amount, 2),
@@ -206,6 +288,8 @@ def summary(trade: Trade):
         "risk_reward_ratio": round(ratio, 2),
         "position_size": round(lot, 2) if lot is not None else None,
         "pip_value": round(pip_value, 2),
+        "risk_per_pip": round(risk_per_pip, 2),
         "required_margin": round(required_margin, 2),
+        "leverage": leverage,
         "advice": advice(trade)["advice"],
     }
