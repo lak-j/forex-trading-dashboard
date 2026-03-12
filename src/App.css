@@ -471,6 +471,43 @@
   color: rgba(31, 41, 55, 0.8);
 }
 
+.session-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.session-card {
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  font-size: 0.85rem;
+  color: rgba(31, 41, 55, 0.85);
+}
+
+.session-card.open {
+  border-color: rgba(34, 197, 94, 0.85);
+  box-shadow: 0 10px 22px rgba(34, 197, 94, 0.2);
+}
+
+.session-name {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.session-meta {
+  color: rgba(31, 41, 55, 0.7);
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+}
+
+.session-status {
+  font-weight: 700;
+  color: rgba(31, 41, 55, 0.8);
+}
+
 .tips li {
   margin-bottom: 10px;
   line-height: 1.45;

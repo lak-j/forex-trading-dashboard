@@ -126,6 +126,7 @@ function App() {
   const [chartInterval, setChartInterval] = useState("15");
   const [chartTheme, setChartTheme] = useState("light");
   const [analytics, setAnalytics] = useState(null);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -433,6 +434,33 @@ function App() {
     if (!allowZero && num <= 0) return false;
     return true;
   };
+
+  const sessions = useMemo(() => {
+    const now = currentTime;
+    const utcHour = now.getUTCHours();
+
+    const ranges = [
+      { name: "Sydney", start: 22, end: 7, label: "22:00–07:00 UTC" },
+      { name: "Tokyo", start: 0, end: 9, label: "00:00–09:00 UTC" },
+      { name: "London", start: 7, end: 16, label: "07:00–16:00 UTC" },
+      { name: "New York", start: 12, end: 21, label: "12:00–21:00 UTC" },
+    ];
+
+    const isOpen = (hour, start, end) => {
+      if (start < end) return hour >= start && hour < end;
+      return hour >= start || hour < end;
+    };
+
+    return ranges.map((session) => ({
+      ...session,
+      open: isOpen(utcHour, session.start, session.end),
+    }));
+  }, [currentTime]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const canCalculate =
     isValidNumber(capital) &&
@@ -956,7 +984,23 @@ function App() {
         </section>
 
         <aside className="card card-aside">
-          <h3>Quick tips</h3>
+          <h3>Market sessions</h3>
+          <div className="session-grid" aria-label="Forex market sessions">
+            {sessions.map((session) => (
+              <div
+                key={session.name}
+                className={`session-card ${session.open ? "open" : ""}`}
+              >
+                <div className="session-name">{session.name}</div>
+                <div className="session-meta">{session.label}</div>
+                <div className="session-status">
+                  {session.open ? "Open now" : "Closed"}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h3 style={{ marginTop: "20px" }}>Quick tips</h3>
           <ul className="tips">
             <li>
               <strong>Keep risk low</strong> — most pros risk 1–2% per trade.
