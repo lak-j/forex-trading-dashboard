@@ -134,6 +134,7 @@ function App() {
   const [resultLines, setResultLines] = useState(["No calculation yet."]);
   const [summaryData, setSummaryData] = useState(null);
   const [signalData, setSignalData] = useState(null);
+  const [taData, setTaData] = useState(null);
   const [history, setHistory] = useState([]);
 
   const [touched, setTouched] = useState({
@@ -381,11 +382,28 @@ function App() {
             lines.push(`Model: ${data.model}`);
           }
           break;
+        case "ta":
+          setTaData(data);
+          lines.push(`Latest close: ${formatCurrency(data.latest_price)}`);
+          if (data.live_price != null) {
+            lines.push(`Live quote: ${formatCurrency(data.live_price)}`);
+          }
+          if (data.sma) {
+            if (data.sma["5"] != null) lines.push(`SMA 5: ${formatDecimal(data.sma["5"], 5)}`);
+            if (data.sma["10"] != null) lines.push(`SMA 10: ${formatDecimal(data.sma["10"], 5)}`);
+            if (data.sma["20"] != null) lines.push(`SMA 20: ${formatDecimal(data.sma["20"], 5)}`);
+          }
+          if (data.rsi != null) {
+            lines.push(`RSI 14: ${formatDecimal(data.rsi, 2)}`);
+            lines.push(`Recommendation: ${data.recommendation}`);
+          }
+          break;
         case "summary":
           if (data.error) {
             lines.push(`Error: ${data.error}`);
             setSummaryData(null);
             setSignalData(null);
+            setTaData(null);
           } else {
             setSummaryData(data);
             setSignalData(data.signal ?? null);
@@ -426,6 +444,7 @@ function App() {
       setResultLines(["❌ Backend connection failed"]);
       setSummaryData(null);
       setSignalData(null);
+      setTaData(null);
     } finally {
       setLoading(false);
     }
@@ -444,6 +463,7 @@ function App() {
     setResultLines(["No calculation yet."]);
     setSummaryData(null);
     setSignalData(null);
+    setTaData(null);
     setTouched({
       capital: false,
       risk: false,
@@ -634,6 +654,7 @@ function App() {
                       setCapital(e.target.value);
                       setSummaryData(null);
                       setSignalData(null);
+                      setTaData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, capital: true }))}
                     className={
@@ -655,6 +676,7 @@ function App() {
                       setRisk(e.target.value);
                       setSummaryData(null);
                       setSignalData(null);
+                      setTaData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, risk: true }))}
                     className={
@@ -676,6 +698,7 @@ function App() {
                       setLot(e.target.value);
                       setSummaryData(null);
                       setSignalData(null);
+                      setTaData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, lot: true }))}
                     className={touched.lot && !isValidNumber(lot) ? "invalid" : ""}
@@ -695,6 +718,7 @@ function App() {
                       setLeverage(e.target.value);
                       setSummaryData(null);
                       setSignalData(null);
+                      setTaData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, leverage: true }))}
                     className={
@@ -721,6 +745,7 @@ function App() {
                       setPips(e.target.value);
                       setSummaryData(null);
                       setSignalData(null);
+                      setTaData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, pips: true }))}
                     className={
@@ -742,6 +767,7 @@ function App() {
                       setEntry(e.target.value);
                       setSummaryData(null);
                       setSignalData(null);
+                      setTaData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, entry: true }))}
                     className={
@@ -763,6 +789,7 @@ function App() {
                       setStop(e.target.value);
                       setSummaryData(null);
                       setSignalData(null);
+                      setTaData(null);
                     }}
                     onBlur={() => setTouched((t) => ({ ...t, stop: true }))}
                     className={
@@ -847,6 +874,13 @@ function App() {
                 >
                   Signal
                 </button>
+                <button
+                  className="button"
+                  onClick={() => handleFetch("ta", "TA")}
+                  disabled={!canCalculate || loading}
+                >
+                  TA
+                </button>
               </div>
 
               {summaryData && (
@@ -898,6 +932,18 @@ function App() {
                           {summaryData.signal.confidence}% confidence
                         </div>
                       ) : null}
+                    </div>
+                  )}
+
+                  {taData && (
+                    <div className="stat-card">
+                      <div className="stat-title">Live price</div>
+                      <div className="stat-value">
+                        {formatCurrency(taData.live_price ?? taData.latest_price)}
+                      </div>
+                      <div className="stat-sub">
+                        SMA 20: {formatDecimal(taData.sma?.["20"], 5)}
+                      </div>
                     </div>
                   )}
                 </div>

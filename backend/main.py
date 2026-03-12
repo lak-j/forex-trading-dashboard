@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import urllib.request
 import urllib.parse
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 app = FastAPI()
 
@@ -39,36 +39,64 @@ def home():
     return {"message": "Forex Trading API Running 🚀"}
 
 
+price_history = {}
+
+
 def _fetch_live_rate(base: str, quote: str):
-    """Fetches a live forex rate using a free public API (exchangerate.host)."""
+    """Fetches a live forex rate using a free public API (open.er-api.com)."""
     base = base.upper()
     quote = quote.upper()
 
     if base == quote:
         return {"rate": 1.0, "source": "self"}
 
-    url = (
-        "https://api.exchangerate.host/convert?"
-        + urllib.parse.urlencode({"from": base, "to": quote, "places": 6})
-    )
+    url = f"https://open.er-api.com/v6/latest/{base}"
 
     try:
-        with urllib.request.urlopen(url, timeout=5) as resp:
+        with urllib.request.urlopen(url, timeout=6) as resp:
             raw = resp.read().decode("utf-8")
             data = json.loads(raw)
     except Exception as e:
         return {"error": f"Failed to fetch rate: {e}"}
 
-    if not data.get("success"):
-        return {"error": data.get("error", "Unknown API error")}
+    if data.get("result") != "success":
+        return {"error": data.get("error-type", "Unknown API error")}
 
-    rate = data.get("result")
-    timestamp = data.get("timestamp")
+    rates = data.get("rates") or {}
+    rate = rates.get(quote)
+
+    if rate is None:
+        return {"error": f"Rate for {base}/{quote} not found"}
+
     return {
-        "rate": round(rate, 6) if isinstance(rate, (int, float)) else None,
-        "timestamp": datetime.utcfromtimestamp(timestamp).isoformat() + "Z" if timestamp else None,
-        "source": "exchangerate.host",
+        "rate": round(rate, 6),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "source": "open.er-api.com",
     }
+
+
+def _record_price(pair: str, price: float, max_points: int = 60):
+    """Store the most recent close prices for the given pair."""
+    if not isinstance(price, (int, float)):
+        return
+
+    key = pair.upper()
+    history = price_history.get(key, [])
+
+    now = datetime.utcnow()
+    # If the latest entry is within 60 seconds, replace it to avoid duplicates
+    if history and (now - history[-1][0]).total_seconds() < 60:
+        history[-1] = (now, price)
+    else:
+        history.append((now, price))
+
+    price_history[key] = history[-max_points:]
+
+
+def _get_price_history(pair: str):
+    return [p for (_, p) in price_history.get(pair.upper(), [])]
+
+
 
 
 def _market_sessions():
@@ -279,6 +307,38 @@ def advice(trade: Trade):
     return {"advice": text}
 
 
+def _compute_sma(prices: list[float], period: int):
+    if len(prices) < period:
+        return None
+    return sum(prices[-period:]) / period
+
+
+def _compute_rsi(prices: list[float], period: int = 14):
+    """Compute RSI using Wilder's smoothing method."""
+    if len(prices) < period + 1:
+        return None
+
+    gains = []
+    losses = []
+    for i in range(1, len(prices)):
+        delta = prices[i] - prices[i - 1]
+        gains.append(max(delta, 0))
+        losses.append(max(-delta, 0))
+
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+
+    if avg_loss == 0:
+        return 100.0
+
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
 def ai_signal(trade: Trade):
     """Generate a simple rule-based 'AI' signal for the trade."""
 
@@ -343,6 +403,57 @@ def signal(trade: Trade):
     """Return a lightweight signal based on the current trade inputs."""
 
     return ai_signal(trade)
+
+
+@app.post("/ta")
+def ta(trade: Trade):
+    """Provide basic technical indicators (SMA, RSI) based on recent price history."""
+
+    if "/" not in trade.pair:
+        return {"error": "Pair must be in BASE/QUOTE format"}
+
+    pair = trade.pair.strip().upper()
+    base, quote_symbol = pair.split("/", 1)
+
+    live = _fetch_live_rate(base, quote_symbol)
+    if "error" in live:
+        return {"error": live["error"]}
+
+    live_price = live.get("rate")
+    _record_price(pair, live_price)
+
+    closes = _get_price_history(pair)
+    sma_5 = _compute_sma(closes, 5)
+    sma_10 = _compute_sma(closes, 10)
+    sma_20 = _compute_sma(closes, 20)
+    rsi_14 = _compute_rsi(closes, 14)
+
+    latest = closes[-1] if closes else live_price
+
+    recommendation = "Neutral"
+    if rsi_14 is not None:
+        if rsi_14 > 70:
+            recommendation = "Overbought – consider selling or waiting"
+        elif rsi_14 < 30:
+            recommendation = "Oversold – consider buying or waiting"
+
+    history = []
+    for ts, price in price_history.get(pair, []):
+        history.append({"timestamp": ts.isoformat() + "Z", "close": price})
+
+    return {
+        "pair": pair,
+        "latest_price": latest,
+        "live_price": live_price,
+        "sma": {
+            "5": sma_5,
+            "10": sma_10,
+            "20": sma_20,
+        },
+        "rsi": rsi_14,
+        "recommendation": recommendation,
+        "history": history,
+    }
 
 
 @app.post("/summary")
