@@ -1,10 +1,14 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException, Depends, status
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import urllib.request
 import urllib.parse
 import json
 from datetime import datetime, timedelta
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from backend.models import Trade, User, UserLogin, Token
 
 app = FastAPI()
 
@@ -20,6 +24,76 @@ app.add_middleware(
 )
 
 # -----------------------
+# Authentication Configuration
+# -----------------------
+SECRET_KEY = "your-secret-key-here"  # In production, use environment variable
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# In-memory user storage (use database in production)
+fake_users_db = {
+    "admin": {
+        "username": "admin",
+        "email": "admin@lake.com",
+        "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",  # SHA256 hash of "admin123"
+        "is_admin": True,
+    }
+}
+
+import hashlib
+
+def get_password_hash(password):
+    # For demo purposes, using a simple hash. In production, use proper password hashing
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(plain_password, hashed_password):
+    return get_password_hash(plain_password) == hashed_password
+
+def get_user(username: str):
+    if username in fake_users_db:
+        user_dict = fake_users_db[username]
+        return User(**user_dict)
+
+def authenticate_user(username: str, password: str):
+    user = get_user(username)
+    if not user:
+        return False
+    if not verify_password(password, user.password):
+        return False
+    return user
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user = get_user(username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+# -----------------------
 # Request Model
 # -----------------------
 class Trade(BaseModel):
@@ -32,11 +106,87 @@ class Trade(BaseModel):
     stop_loss_pips: float
     trade_type: str
     leverage: int = 100
+    spread_pips: float = 0.0
 
 
 @app.get("/")
 def home():
     return {"message": "Forex Trading API Running 🚀"}
+
+# -----------------------
+# Authentication Endpoints
+# -----------------------
+@app.post("/register", response_model=Token)
+async def register(user: User):
+    if user.username in fake_users_db:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    hashed_password = get_password_hash(user.password)
+    fake_users_db[user.username] = {
+        "username": user.username,
+        "email": user.email,
+        "password": hashed_password,
+        "is_admin": False,  # New users are not admin by default
+    }
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/token", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/admin/users", response_model=User)
+async def create_user(user: User, current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    if user.username in fake_users_db:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    hashed_password = get_password_hash(user.password)
+    fake_users_db[user.username] = {
+        "username": user.username,
+        "email": user.email,
+        "password": hashed_password,
+        "is_admin": user.is_admin,
+    }
+    return User(**fake_users_db[user.username])
+
+@app.get("/admin/users")
+async def get_users(current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return list(fake_users_db.values())
+
+@app.delete("/admin/users/{username}")
+async def delete_user(username: str, current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if username not in fake_users_db:
+        raise HTTPException(status_code=404, detail="User not found")
+    if username == "admin":
+        raise HTTPException(status_code=400, detail="Cannot delete admin user")
+    del fake_users_db[username]
+    return {"message": "User deleted"}
+
+@app.get("/users/me")
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    return {
+        "username": current_user.username,
+        "email": current_user.email,
+        "is_admin": current_user.is_admin
+    }
 
 
 price_history = {}
@@ -123,7 +273,7 @@ def _market_sessions():
 
 
 @app.get("/quote")
-def quote(pair: str = Query(..., description="Currency pair in the format BASE/QUOTE")):
+def quote(pair: str = Query(..., description="Currency pair in the format BASE/QUOTE"), current_user: User = Depends(get_current_user)):
     """Return a live quote for the requested forex pair."""
 
     if "/" not in pair:
@@ -146,7 +296,7 @@ def quote(pair: str = Query(..., description="Currency pair in the format BASE/Q
 # Risk Amount
 # -----------------------
 @app.post("/risk")
-def risk(trade: Trade):
+def risk(trade: Trade, current_user: User = Depends(get_current_user)):
 
     risk_amount = trade.capital * trade.risk_percent / 100
 
@@ -159,7 +309,7 @@ def risk(trade: Trade):
 # Profit / Loss
 # -----------------------
 @app.post("/profit")
-def profit(trade: Trade):
+def profit(trade: Trade, current_user: User = Depends(get_current_user)):
 
     pip_value = 10 * trade.lot_size
     profit_loss = trade.pips * pip_value
@@ -173,7 +323,7 @@ def profit(trade: Trade):
 # Stop Loss Price
 # -----------------------
 @app.post("/stoploss")
-def stoploss(trade: Trade):
+def stoploss(trade: Trade, current_user: User = Depends(get_current_user)):
 
     if trade.trade_type == "BUY":
         price = trade.entry_price - trade.stop_loss_pips
@@ -187,7 +337,7 @@ def stoploss(trade: Trade):
 # Take Profit
 # -----------------------
 @app.post("/takeprofit")
-def takeprofit(trade: Trade):
+def takeprofit(trade: Trade, current_user: User = Depends(get_current_user)):
 
     if trade.trade_type == "BUY":
         price = trade.entry_price + trade.pips
@@ -201,7 +351,7 @@ def takeprofit(trade: Trade):
 # Risk Reward
 # -----------------------
 @app.post("/riskreward")
-def riskreward(trade: Trade):
+def riskreward(trade: Trade, current_user: User = Depends(get_current_user)):
 
     risk_amount = trade.capital * trade.risk_percent / 100
     reward = trade.pips * trade.lot_size * 10
@@ -219,7 +369,7 @@ def riskreward(trade: Trade):
 # Position Size
 # -----------------------
 @app.post("/positionsize")
-def position_size(trade: Trade):
+def position_size(trade: Trade, current_user: User = Depends(get_current_user)):
 
     risk_amount = trade.capital * trade.risk_percent / 100
 
@@ -235,7 +385,7 @@ def position_size(trade: Trade):
 # Pip Value
 # -----------------------
 @app.post("/pipvalue")
-def pipvalue(trade: Trade):
+def pipvalue(trade: Trade, current_user: User = Depends(get_current_user)):
 
     value = trade.lot_size * 10
 
@@ -246,7 +396,7 @@ def pipvalue(trade: Trade):
 # Margin Requirement
 # -----------------------
 @app.post("/margin")
-def margin(trade: Trade):
+def margin(trade: Trade, current_user: User = Depends(get_current_user)):
 
     leverage = trade.leverage or 100
     margin = (trade.lot_size * 100000) / leverage
@@ -258,7 +408,7 @@ def margin(trade: Trade):
 # Risk per pip
 # -----------------------
 @app.post("/riskperpip")
-def risk_per_pip(trade: Trade):
+def risk_per_pip(trade: Trade, current_user: User = Depends(get_current_user)):
     """Return how much $ risk each pip represents for the current stop-loss."""
 
     risk_amount = trade.capital * trade.risk_percent / 100
@@ -290,7 +440,7 @@ def _compute_risk_reward(trade: Trade):
 # Trade Advice
 # -----------------------
 @app.post("/advice")
-def advice(trade: Trade):
+def advice(trade: Trade, current_user: User = Depends(get_current_user)):
 
     risk_amount, reward, rr = _compute_risk_reward(trade)
 
@@ -396,17 +546,35 @@ def ai_signal(trade: Trade):
 
 
 # -----------------------
+# Break-even price
+# -----------------------
+@app.post("/breakeven")
+def breakeven(trade: Trade, current_user: User = Depends(get_current_user)):
+    """Return the price at which the trade would break even (after spread)."""
+
+    # In forex, the spread is typically quoted in pips.
+    # For a BUY trade you need the price to move up by the spread to cover the cost.
+    # For a SELL trade you need the price to move down by the spread to cover the cost.
+    if trade.trade_type == "BUY":
+        price = trade.entry_price + trade.spread_pips
+    else:
+        price = trade.entry_price - trade.spread_pips
+
+    return {"break_even_price": round(price, 5), "spread_pips": round(trade.spread_pips, 2)}
+
+
+# -----------------------
 # Full trade summary
 # -----------------------
 @app.post("/signal")
-def signal(trade: Trade):
+def signal(trade: Trade, current_user: User = Depends(get_current_user)):
     """Return a lightweight signal based on the current trade inputs."""
 
     return ai_signal(trade)
 
 
 @app.post("/ta")
-def ta(trade: Trade):
+def ta(trade: Trade, current_user: User = Depends(get_current_user)):
     """Provide basic technical indicators (SMA, RSI) based on recent price history."""
 
     if "/" not in trade.pair:
@@ -457,7 +625,7 @@ def ta(trade: Trade):
 
 
 @app.post("/summary")
-def summary(trade: Trade):
+def summary(trade: Trade, current_user: User = Depends(get_current_user)):
     """Return a full set of calculated values so the UI can render a single summary."""
 
     risk_amount = trade.capital * trade.risk_percent / 100

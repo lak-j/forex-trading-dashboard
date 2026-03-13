@@ -3,7 +3,7 @@ import logo from "./logo.svg";
 import "./App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const DEFAULT_API = "https://cuddly-space-succotash-69p4w9jj4rv35454-8000.app.github.dev";
+const BACKEND_URL = "https://cuddly-space-succotash-69p4w9jj4rv35454-8000.app.github.dev";
 
 const PAIRS = [
   "EUR/USD",
@@ -29,6 +29,150 @@ const formatDecimal = (value, digits = 5) => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
   return Number(value).toFixed(digits);
 };
+
+function AuthForm({ onLogin, onRegister, loading, error }) {
+  const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (isLogin) {
+      onLogin(username, password);
+    } else {
+      onRegister(username, email, password);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="auth-form">
+      <div className="auth-tabs">
+        <button
+          type="button"
+          className={`auth-tab ${isLogin ? "active" : ""}`}
+          onClick={() => setIsLogin(true)}
+        >
+          Login
+        </button>
+        <button
+          type="button"
+          className={`auth-tab ${!isLogin ? "active" : ""}`}
+          onClick={() => setIsLogin(false)}
+        >
+          Register
+        </button>
+      </div>
+
+      <div className="field">
+        <label>Username</label>
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+          placeholder="Enter username"
+        />
+      </div>
+
+      {!isLogin && (
+        <div className="field">
+          <label>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            placeholder="Enter email"
+          />
+        </div>
+      )}
+
+      <div className="field">
+        <label>Password</label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          placeholder="Enter password"
+        />
+      </div>
+
+      {error && <div className="auth-error">{error}</div>}
+
+      <button type="submit" className="button button-primary" disabled={loading}>
+        {loading ? "Please wait..." : isLogin ? "Login" : "Register"}
+      </button>
+    </form>
+  );
+}
+
+function AddUserForm({ onCreate, loading, error }) {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onCreate(username, email, password, isAdmin);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="auth-form">
+      <div className="field">
+        <label>Username</label>
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+          placeholder="Enter username"
+        />
+      </div>
+
+      <div className="field">
+        <label>Email</label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          placeholder="Enter email"
+        />
+      </div>
+
+      <div className="field">
+        <label>Password</label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          placeholder="Enter password"
+        />
+      </div>
+
+      <div className="field">
+        <label>
+          <input
+            type="checkbox"
+            checked={isAdmin}
+            onChange={(e) => setIsAdmin(e.target.checked)}
+          />
+          Admin
+        </label>
+      </div>
+
+      {error && <div className="auth-error">{error}</div>}
+
+      <button type="submit" className="button button-primary" disabled={loading}>
+        {loading ? "Creating..." : "Create User"}
+      </button>
+    </form>
+  );
+}
 
 function ProfitChart({ history }) {
   const canvasRef = useRef(null);
@@ -108,7 +252,7 @@ function ProfitChart({ history }) {
 }
 
 function App() {
-  const [apiUrl] = useState(DEFAULT_API);
+  const [apiUrl] = useState(BACKEND_URL);
   const [pair, setPair] = useState("EUR/USD");
   const [capital, setCapital] = useState("100");
   const [risk, setRisk] = useState("1");
@@ -116,6 +260,7 @@ function App() {
   const [pips, setPips] = useState("20");
   const [entry, setEntry] = useState("1.1000");
   const [stop, setStop] = useState("2");
+  const [spread, setSpread] = useState("0");
   const [type, setType] = useState("BUY");
   const [leverage, setLeverage] = useState("100");
 
@@ -144,10 +289,22 @@ function App() {
     pips: false,
     entry: false,
     stop: false,
+    spread: false,
     leverage: false,
   });
 
   const [clipboardMessage, setClipboardMessage] = useState("");
+
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [authToken, setAuthToken] = useState(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [showLogin, setShowLogin] = useState(false);
+
+  const [users, setUsers] = useState([]);
+  const [showAddUser, setShowAddUser] = useState(false);
 
   const isValidLeverage = (value) => {
     const num = Number(value);
@@ -163,10 +320,11 @@ function App() {
       pips: Number(pips),
       entry_price: Number(entry),
       stop_loss_pips: Number(stop),
+      spread_pips: Number(spread),
       trade_type: type,
       leverage: Number(leverage),
     }),
-    [pair, capital, risk, lot, pips, entry, stop, type, leverage]
+    [pair, capital, risk, lot, pips, entry, stop, spread, type, leverage]
   );
 
   const computeAnalytics = (historyItems) => {
@@ -207,6 +365,7 @@ function App() {
         if (parsed.pips) setPips(parsed.pips);
         if (parsed.entry) setEntry(parsed.entry);
         if (parsed.stop) setStop(parsed.stop);
+        if (parsed.spread) setSpread(parsed.spread);
         if (parsed.type) setType(parsed.type);
         if (parsed.leverage) setLeverage(parsed.leverage);
         if (parsed.theme) setTheme(parsed.theme);
@@ -239,6 +398,7 @@ function App() {
           pips,
           entry,
           stop,
+          spread,
           type,
           leverage,
           theme,
@@ -258,6 +418,7 @@ function App() {
     pips,
     entry,
     stop,
+    spread,
     type,
     leverage,
     theme,
@@ -310,9 +471,14 @@ function App() {
     setLoading(true);
 
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (authToken) {
+        headers.Authorization = `Bearer ${authToken}`;
+      }
+
       const res = await fetch(`${apiUrl}/${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
       });
 
@@ -328,6 +494,12 @@ function App() {
           break;
         case "profit":
           lines.push(`Estimated Profit/Loss: ${formatCurrency(data.profit_loss)}`);
+          break;
+        case "breakeven":
+          lines.push(`Break-even price: ${formatDecimal(data.break_even_price, 5)}`);
+          if (data.spread_pips != null) {
+            lines.push(`Spread: ${formatDecimal(data.spread_pips, 2)} pips`);
+          }
           break;
         case "stoploss":
           lines.push(`Stop Loss Price: ${formatDecimal(data.stop_loss)}`);
@@ -420,8 +592,12 @@ function App() {
             lines.push(`Margin Needed: ${formatCurrency(data.required_margin)} (x${data.leverage})`);
             lines.push(`Advice: ${data.advice}`);
             if (data.signal) {
-              lines.push(`Signal: ${data.signal}`);
-              if (data.signal?.confidence != null) {
+              const signalText =
+                typeof data.signal === "object" && data.signal.signal
+                  ? data.signal.signal
+                  : data.signal;
+              lines.push(`Signal: ${signalText}`);
+              if (typeof data.signal === "object" && data.signal.confidence != null) {
                 lines.push(`Signal confidence: ${data.signal.confidence}%`);
               }
             }
@@ -457,6 +633,7 @@ function App() {
     setPips("20");
     setEntry("1.1000");
     setStop("20");
+    setSpread("0");
     setType("BUY");
     setLeverage("100");
     setHighContrast(false);
@@ -471,6 +648,7 @@ function App() {
       pips: false,
       entry: false,
       stop: false,
+      spread: false,
       leverage: false,
     });
     setError("");
@@ -480,6 +658,185 @@ function App() {
     setHistory([]);
     setAnalytics(null);
   };
+
+  // Authentication functions
+  const handleLogin = async (username, password) => {
+    setAuthLoading(true);
+    setAuthError("");
+
+    try {
+      const response = await fetch(`${apiUrl}/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          username,
+          password,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAuthToken(data.access_token);
+        setIsAuthenticated(true);
+        localStorage.setItem("authToken", data.access_token);
+        setShowLogin(false);
+        // Fetch user info
+        const userResponse = await fetch(`${apiUrl}/users/me`, {
+          headers: {
+            Authorization: `Bearer ${data.access_token}`,
+          },
+        });
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          setUser(userData);
+        }
+      } else {
+        const errorData = await response.json();
+        setAuthError(errorData.detail || "Login failed");
+      }
+    } catch (err) {
+      setAuthError("Unable to connect to server");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleRegister = async (username, email, password) => {
+    setAuthLoading(true);
+    setAuthError("");
+
+    try {
+      const response = await fetch(`${apiUrl}/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAuthToken(data.access_token);
+        setIsAuthenticated(true);
+        localStorage.setItem("authToken", data.access_token);
+        setUser({ username, email });
+        setShowLogin(false);
+      } else {
+        const errorData = await response.json();
+        setAuthError(errorData.detail || "Registration failed");
+      }
+    } catch (err) {
+      setAuthError("Unable to connect to server");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setUser(null);
+    setAuthToken(null);
+    localStorage.removeItem("authToken");
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/admin/users`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+      } else {
+        setError("Failed to fetch users");
+      }
+    } catch {
+      setError("Unable to connect to server");
+    }
+  };
+
+  const handleDeleteUser = async (username) => {
+    if (!confirm(`Delete user ${username}?`)) return;
+    try {
+      const res = await fetch(`${apiUrl}/admin/users/${username}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      if (res.ok) {
+        setUsers(users.filter(u => u.username !== username));
+      } else {
+        setError("Failed to delete user");
+      }
+    } catch {
+      setError("Unable to connect to server");
+    }
+  };
+
+  const handleCreateUser = async (username, email, password, isAdmin) => {
+    try {
+      const res = await fetch(`${apiUrl}/admin/users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ username, email, password, is_admin: isAdmin })
+      });
+      if (res.ok) {
+        const newUser = await res.json();
+        setUsers([...users, newUser]);
+        setShowAddUser(false);
+      } else {
+        const err = await res.json();
+        setAuthError(err.detail || "Failed to create user");
+      }
+    } catch {
+      setAuthError("Unable to connect to server");
+    }
+  };
+
+  // Check for existing token on mount
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (token) {
+      setAuthToken(token);
+      setIsAuthenticated(true);
+      // Verify token is still valid
+      fetch(`${apiUrl}/users/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+        .then((res) => {
+          if (res.ok) {
+            return res.json();
+          } else {
+            throw new Error("Token invalid");
+          }
+        })
+        .then((userData) => {
+          setUser(userData);
+        })
+        .catch(() => {
+          // Token invalid, clear it
+          localStorage.removeItem("authToken");
+          setIsAuthenticated(false);
+          setAuthToken(null);
+        });
+    }
+  }, [apiUrl]);
+
+  useEffect(() => {
+    if (activeTab === "users" && isAuthenticated && user?.is_admin) {
+      fetchUsers();
+    }
+  }, [activeTab, isAuthenticated, user]);
 
   const isValidNumber = (value, allowZero = false) => {
     const num = Number(value);
@@ -522,6 +879,7 @@ function App() {
     isValidNumber(pips, true) &&
     isValidNumber(entry) &&
     isValidNumber(stop, true) &&
+    isValidNumber(spread, true) &&
     isValidLeverage(leverage);
 
   useEffect(() => {
@@ -547,12 +905,25 @@ function App() {
           <div className="app-title">
             <h1>Forex Trading App</h1>
             <p className="app-subtitle">
-              Estimate risk, position size and profit for your next trade.
+              Estimate risk and profit for your next trade.
             </p>
           </div>
         </div>
 
         <div className="app-actions">
+          {isAuthenticated ? (
+            <div className="user-info">
+              <span>Welcome, {user?.username}</span>
+              <button className="button button-secondary" onClick={handleLogout}>
+                Logout
+              </button>
+            </div>
+          ) : (
+            <button className="button button-primary" onClick={() => setShowLogin(true)}>
+              Login
+            </button>
+          )}
+
           <button
             className={`button ${theme === "dark" ? "button-primary" : "button-secondary"}`}
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
@@ -582,7 +953,8 @@ function App() {
         </div>
       </header>
 
-      <main className="app-main">
+      {isAuthenticated && (
+        <main className="app-main">
         <section className="card card-main">
           <div className="tab-bar">
             <button
@@ -620,6 +992,15 @@ function App() {
             >
               Analytics
             </button>
+            {user?.is_admin && (
+              <button
+                className={`tab ${activeTab === "users" ? "active" : ""}`}
+                type="button"
+                onClick={() => setActiveTab("users")}
+              >
+                User Management
+              </button>
+            )}
           </div>
 
           {activeTab === "calculator" && (
@@ -803,6 +1184,28 @@ function App() {
                   )}
                 </div>
 
+                <div className="field">
+                  <label>Spread (pips)</label>
+                  <input
+                    value={spread}
+                    onChange={(e) => {
+                      setSpread(e.target.value);
+                      setSummaryData(null);
+                      setSignalData(null);
+                      setTaData(null);
+                    }}
+                    onBlur={() => setTouched((t) => ({ ...t, spread: true }))}
+                    className={
+                      touched.spread && !isValidNumber(spread, true) ? "invalid" : ""
+                    }
+                    placeholder="e.g. 0.8"
+                    inputMode="decimal"
+                  />
+                  {touched.spread && !isValidNumber(spread, true) && (
+                    <div className="field-error">Enter a valid spread</div>
+                  )}
+                </div>
+
                 <div className="field field--full">
                   <label>Trade type</label>
                   <div className="toggle">
@@ -845,6 +1248,13 @@ function App() {
                   disabled={!canCalculate || loading}
                 >
                   Profit
+                </button>
+                <button
+                  className="button"
+                  onClick={() => handleFetch("breakeven", "Break-even")}
+                  disabled={!canCalculate || loading}
+                >
+                  Break-even
                 </button>
                 <button
                   className="button"
@@ -1149,6 +1559,29 @@ function App() {
               )}
             </div>
           )}
+
+          {activeTab === "users" && (
+            <div className="card-content">
+              <div className="history-header">
+                <h3>User Management</h3>
+                <button className="button button-primary" onClick={() => setShowAddUser(true)}>Add User</button>
+              </div>
+              {users.length === 0 ? (
+                <p className="empty">No users found.</p>
+              ) : (
+                <ul className="history-list">
+                  {users.map((u) => (
+                    <li key={u.username} className="history-item">
+                      <div className="history-meta">
+                        <strong>{u.username}</strong> - {u.email} {u.is_admin ? "(Admin)" : ""}
+                      </div>
+                      <button className="button button-secondary" onClick={() => handleDeleteUser(u.username)}>Delete</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </section>
 
         <aside className="card card-aside">
@@ -1188,8 +1621,57 @@ function App() {
           </p>
         </aside>
       </main>
+      )}
 
-      
+      {showLogin && (
+        <div className="modal-overlay" onClick={() => setShowLogin(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Authentication</h2>
+              <button className="modal-close" onClick={() => setShowLogin(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <AuthForm
+                onLogin={handleLogin}
+                onRegister={handleRegister}
+                loading={authLoading}
+                error={authError}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddUser && (
+        <div className="modal-overlay" onClick={() => setShowAddUser(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add User</h2>
+              <button className="modal-close" onClick={() => setShowAddUser(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <AddUserForm
+                onCreate={handleCreateUser}
+                loading={authLoading}
+                error={authError}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auth required overlay */}
+      {!isAuthenticated && (
+        <div className="auth-overlay">
+          <div className="auth-message">
+            <h2>Login Required</h2>
+            <p>Please log in to access the forex trading calculator.</p>
+            <button className="button button-primary" onClick={() => setShowLogin(true)}>
+              Login
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
